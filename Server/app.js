@@ -22,7 +22,7 @@ app.get('/devices', function (req, res) {
 						"created_at":player["created_at"],
 						"device_model":player["device_model"],
 						"device_type": (player["device_type"] == 1 ? "Android" : "iOS"),
-						"identifier": player["identifier"]
+						"id": player["id"]
 					});
 				}
 			}
