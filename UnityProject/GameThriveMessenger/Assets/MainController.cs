@@ -6,69 +6,62 @@ using GameThrivePush.MiniJSON;
 
 public class MainController : MonoBehaviour {
 
+    // READ ME!!!!!
+    // Update these 2 with your GameThrive App ID and Google Project Number.
+    private const string GT_APP_ID = "abfa40c2-606a-11e4-a646-23007197f2dd";
+    private const string GOOGLE_PROJECT_NUMBER = "703322744261";
+
     private class GameThrivePlayer {
         public string name, playerId;
     }
 
-    List<GameThrivePlayer> players;
-
-    private static string GTAppId = "abfa40c2-606a-11e4-a646-23007197f2dd";
+    List<GameThrivePlayer> players = new List<GameThrivePlayer>();
+    private string thisPlayerId = null;
 
     private static string incomingMessage = null;
-
-    private string thisPlayerId = null;
+    private static List<object> actionButtons;
+    private static string senderId;
 
     public static MainController instance;
 
-	// Use this for initialization
-	void Start () {
+    void Start() {
         instance = this;
 
-        GameThrive.Init(GTAppId, "703322744261", HandleNotification);
+        GameThrive.Init(GT_APP_ID, GOOGLE_PROJECT_NUMBER, HandleNotification);
         GameThrive.GetIdsAvailable((playerId, pushToken) => {
             thisPlayerId = playerId;
         });
 
-        // Testing Datas
-        players = new List<GameThrivePlayer>();
-        players.Add(new GameThrivePlayer() { name = "Player 1", playerId = "bcc6392e-606a-11e4-b132-37bd580286bd" });
-        players.Add(new GameThrivePlayer() { name = "Player 2", playerId = "0d1444d4-606b-11e4-b1ff-b750284a9f04" });
-        players.Add(new GameThrivePlayer() { name = "Player 3", playerId = "bcc6392e-606a-11e4-b132-37bd580286bd" });
-        players.Add(new GameThrivePlayer() { name = "Player 4", playerId = "0d1444d4-606b-11e4-b1ff-b750284a9f04" });
-        players.Add(new GameThrivePlayer() { name = "Player 5", playerId = "bcc6392e-606a-11e4-b132-37bd580286bd" });
-        players.Add(new GameThrivePlayer() { name = "Player 6", playerId = "0d1444d4-606b-11e4-b1ff-b750284a9f04" });
-        players.Add(new GameThrivePlayer() { name = "Player 7", playerId = "bcc6392e-606a-11e4-b132-37bd580286bd" });
-        players.Add(new GameThrivePlayer() { name = "Player 8", playerId = "0d1444d4-606b-11e4-b1ff-b750284a9f04" });
-
-        // Test new message window
-        //incomingMessage = "Test message 11111 2222222 33 4444444444 55555";
-
-        // TODO: Get player list from server
         StartCoroutine(GetDevices());
-	}
+    }
 
     // Gets called when the player opens the notification.
     private static void HandleNotification(string message, Dictionary<string, object> additionalData, bool isActive) {
-        if (isActive)
+        bool hasButtons = (additionalData != null && additionalData.ContainsKey("actionSelected"));
+
+        if (isActive || (hasButtons && additionalData["actionSelected"].Equals("__DEFAULT__"))) {
             incomingMessage = message;
-        else if (additionalData != null && additionalData.ContainsKey("actionSelected")) {
+            senderId = (string)additionalData["sender"];
+            if (additionalData.ContainsKey("actionButtons"))
+                actionButtons = additionalData["actionButtons"] as List<object>;
+        }
+        else if (hasButtons) {
             if (additionalData["actionSelected"].Equals("sound"))
-                instance.SendSound((string)additionalData["sender"], "I got your messsage! Here is a custom sound for you!");
+                SendSoundFromReply((string)additionalData["sender"]);
             else if (additionalData["actionSelected"].Equals("message"))
-                instance.SendButtons((string)additionalData["sender"], "I got your messsage! Here is a message back at you!");
+                SendMessageFromReply((string)additionalData["sender"]);
         }
     }
 
     private Vector2 scrollPosition = Vector2.zero;
-    
+
     void OnGUI() {
         float screenScale = (Screen.width / 1920f) * 4.5f;
         GUI.matrix = Matrix4x4.TRS(Vector3.zero, Quaternion.identity, new Vector3(screenScale, screenScale, 1f));
 
         if (incomingMessage != null) {
             GUIStyle windowStyle = new GUIStyle(GUI.skin.window);
-            //windowStyle.fontSize = 30;
-            GUI.Window(0, new Rect(20, 20, 400, 400), DoMyWindow, "New Message!", windowStyle);
+            GUI.Window(0, new Rect(20, 20, 400, 400), NewNotificationWindow, "New Message!", windowStyle);
         }
 
         if (incomingMessage == null) {
@@ -85,7 +78,13 @@ public class MainController : MonoBehaviour {
         }
     }
 
-    void DoMyWindow(int windowID) {
+    private void CloseNotificationWindow() {
+        incomingMessage = null;
+        actionButtons = null;
+        senderId = null;
+    }
+
+    private void NewNotificationWindow(int windowID) {
         GUIStyle messageStyle = new GUIStyle(GUI.skin.label);
         messageStyle.fontSize = 25;
         GUI.Label(new Rect(20, 60, 350, 200), incomingMessage, messageStyle);
@@ -93,13 +92,24 @@ public class MainController : MonoBehaviour {
         GUIStyle closeButtonStyle = new GUIStyle(GUI.skin.button);
         closeButtonStyle.fontSize = 25;
 
-        if (GUI.Button(new Rect(150, 330, 120, 50), "Close", closeButtonStyle))
-            incomingMessage = null;
+        if (GUI.Button(new Rect(270, 330, 120, 50), "Close", closeButtonStyle))
+            CloseNotificationWindow();
+
+        if (actionButtons != null) {
+            if (GUI.Button(new Rect(10, 330, 120, 50), "Sound", closeButtonStyle)) {
+                SendSoundFromReply(senderId);
+                CloseNotificationWindow();
+            }
+
+            if (GUI.Button(new Rect(140, 330, 120, 50), "Message", closeButtonStyle)) {
+                SendMessageFromReply(senderId);
+                CloseNotificationWindow();
+            }
+        }
     }
 
     private const int PLAYER_GUI_Y_SIZE = 120;
-
-    void ShowPlayerList() {
+    private void ShowPlayerList() {
         GUIStyle playerLabelFont = new GUIStyle(GUI.skin.label);
         playerLabelFont.fontSize = 25;
         playerLabelFont.normal.textColor = Color.white;
@@ -114,9 +124,8 @@ public class MainController : MonoBehaviour {
         GUI.Box(new Rect(10, 10, 395, 190 + PLAYER_GUI_Y_SIZE * players.Count), "Player List", playerListStyle);
 
         float yOffset;
-        for(int i = 0; i < players.Count; i++) {
+        for (int i = 0; i < players.Count; i++) {
             yOffset = i * PLAYER_GUI_Y_SIZE;
-            //GUI.Box(new Rect(10, 80 + yOffset, 300, 100), "", customBoxSize);
 
             GUI.Label(new Rect(150, 140 + yOffset, 200, 40), players[i].name, playerLabelFont);
 
@@ -126,6 +135,14 @@ public class MainController : MonoBehaviour {
             if (GUI.Button(new Rect(215, 180 + yOffset, 178, 60), "Message", customTextSize))
                 SendButtons(players[i].playerId, "You got a button message from someone!");
         }
+    }
+
+    private static void SendSoundFromReply(string senderId) {
+        instance.SendSound(senderId, "I got your messsage! Here is a custom sound for you!");
+    }
+
+    private static void SendMessageFromReply(string senderId) {
+        instance.SendButtons(senderId, "I got your messsage! Here is a message back at you!");
     }
 
     private void SendSound(string playerId, string contentString) {
@@ -150,29 +167,29 @@ public class MainController : MonoBehaviour {
         print("DoPost");
 
         string jsonString = "{"
-                              + "\"app_id\": \"" + GTAppId + "\"," 
+                              + "\"app_id\": \"" + GT_APP_ID + "\","
                               + "\"contents\": {\"en\": \"" + content + "\"},"
-							  + "\"isAndroid\": true,"
+                              + "\"isAndroid\": true,"
                               + "\"isIos\": true,"
                               + extraOptions
                               + "\"include_player_ids\": [\"" + playerId + "\"]"
                             + "}";
 
-	    var headers = new Dictionary<string, string>();
-	    headers.Add("Content-Type", "application/json");
-	
-	    print("Sending JSON:" + jsonString);
-	
-	    byte[] pData = System.Text.Encoding.ASCII.GetBytes(jsonString.ToCharArray());
+        var headers = new Dictionary<string, string>();
+        headers.Add("Content-Type", "application/json");
 
-	    WWW request = new WWW("https://gamethrive.com/api/v1/notifications", pData, headers);
+        print("Sending JSON:" + jsonString);
 
-	    yield return request;
+        byte[] pData = System.Text.Encoding.ASCII.GetBytes(jsonString.ToCharArray());
 
-	    if (!System.String.IsNullOrEmpty(request.error))
-		    print(request.error);
-	    
-	    print(request.text);
+        WWW request = new WWW("https://gamethrive.com/api/v1/notifications", pData, headers);
+
+        yield return request;
+
+        if (!System.String.IsNullOrEmpty(request.error))
+            print(request.error);
+
+        print(request.text);
     }
 
     private IEnumerator GetDevices() {
@@ -187,7 +204,7 @@ public class MainController : MonoBehaviour {
             players = new List<GameThrivePlayer>();
             var playerList = Json.Deserialize(request.text) as List<object>;
             print(playerList);
-            foreach(Dictionary<string, object> player in playerList)
+            foreach (Dictionary<string, object> player in playerList)
                 players.Add(new GameThrivePlayer() { name = (string)player["device_model"], playerId = (string)player["id"] });
         }
         print(request.text);
