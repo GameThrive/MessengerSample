@@ -180,7 +180,7 @@ public class MainController : MonoBehaviour {
 
         print("Sending JSON:" + jsonString);
 
-        byte[] pData = System.Text.Encoding.ASCII.GetBytes(jsonString.ToCharArray());
+        byte[] pData = System.Text.Encoding.UTF8.GetBytes(jsonString.ToCharArray());
 
         WWW request = new WWW("https://gamethrive.com/api/v1/notifications", pData, headers);
 
