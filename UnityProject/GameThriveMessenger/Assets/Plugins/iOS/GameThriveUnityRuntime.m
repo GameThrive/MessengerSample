@@ -1,17 +1,28 @@
 /**
+ * Modified MIT License
+ * 
  * Copyright 2014 GameThrive
  *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- * http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
+ * Permission is hereby granted, free of charge, to any person obtaining a copy
+ * of this software and associated documentation files (the "Software"), to deal
+ * in the Software without restriction, including without limitation the rights
+ * to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+ * copies of the Software, and to permit persons to whom the Software is
+ * furnished to do so, subject to the following conditions:
+ * 
+ * 1. The above copyright notice and this permission notice shall be included in
+ * all copies or substantial portions of the Software.
+ * 
+ * 2. All copies of substantial portions of the Software may only be used in connection
+ * with services provided by GameThrive.
+ * 
+ * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+ * IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+ * FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+ * AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+ * LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+ * OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
+ * THE SOFTWARE.
  */
 
 #import "GameThrive.h"
@@ -28,9 +39,35 @@ char* unityListener = nil;
 char* appId;
 NSMutableDictionary* launchDict;
 
-static void switchMethods(Class class, SEL oldSel, SEL newSel, IMP impl, const char* sig) {
-    class_addMethod(class, newSel, impl, sig);
-    method_exchangeImplementations(class_getInstanceMethod(class, oldSel), class_getInstanceMethod(class, newSel));
+static Class getClassWithProtocolInHierarchy(Class searchClass, Protocol* protocolToFind) {
+    if (!class_conformsToProtocol(searchClass, protocolToFind)) {
+        if ([searchClass superclass] == [NSObject class])
+            return nil;
+        
+        Class foundClass = getClassWithProtocolInHierarchy([searchClass superclass], protocolToFind);
+        if (foundClass)
+            return foundClass;
+        
+        return searchClass;
+    }
+    
+    return searchClass;
+}
+
+static void injectSelector(Class newClass, SEL newSel, Class addToClass, SEL makeLikeSel) {
+    Method newMeth = class_getInstanceMethod(newClass, newSel);
+    IMP imp = method_getImplementation(newMeth);
+    const char* methodTypeEncoding = method_getTypeEncoding(newMeth);
+    
+    BOOL successful = class_addMethod(addToClass, makeLikeSel, imp, methodTypeEncoding);
+    if (!successful) {
+        class_addMethod(addToClass, newSel, imp, methodTypeEncoding);
+        newMeth = class_getInstanceMethod(addToClass, newSel);
+        
+        Method orgMeth = class_getInstanceMethod(addToClass, makeLikeSel);
+        
+        method_exchangeImplementations(orgMeth, newMeth);
+    }
 }
 
 const char* dictionaryToJsonChar(NSDictionary* dictionaryToConvert) {
@@ -45,29 +82,28 @@ const char* dictionaryToJsonChar(NSDictionary* dictionaryToConvert) {
     method_exchangeImplementations(class_getInstanceMethod(self, @selector(setDelegate:)), class_getInstanceMethod(self, @selector(setGameThriveUnityDelegate:)));
 }
 
+static Class delegateClass = nil;
+
 - (void) setGameThriveUnityDelegate:(id<UIApplicationDelegate>)delegate {
-    switchMethods([delegate class], @selector(application:didFinishLaunchingWithOptions:),
-                  @selector(application:selectorDidFinishLaunchingWithOptions:), (IMP)didFinishLaunchingWithOptions_GTLocal, "v@:::");
+    if(delegateClass != nil)
+		return;
+    
+    delegateClass = getClassWithProtocolInHierarchy([delegate class], @protocol(UIApplicationDelegate));
+    
+    injectSelector(self.class, @selector(gameThriveApplication:didFinishLaunchingWithOptions:),
+                   delegateClass, @selector(application:didFinishLaunchingWithOptions:));
     [self setGameThriveUnityDelegate:delegate];
 }
 
-BOOL didFinishLaunchingWithOptions_GTLocal(id self, SEL _cmd, id application, id launchOptions) {
-    BOOL result = YES;
+- (BOOL)gameThriveApplication:(UIApplication*)application didFinishLaunchingWithOptions:(NSDictionary*)launchOptions {
+    if ([launchOptions objectForKey:UIApplicationLaunchOptionsRemoteNotificationKey] != nil)
+        initGameThriveObject(launchOptions, nil, true);
     
-    if ([self respondsToSelector:@selector(application:selectorDidFinishLaunchingWithOptions:)]) {
-        BOOL openedFromNotification = ([launchOptions objectForKey:UIApplicationLaunchOptionsRemoteNotificationKey] != nil);
-        if (openedFromNotification)
-            initGameThriveObject(launchOptions, nil, true);
-        result = (BOOL) [self application:application selectorDidFinishLaunchingWithOptions:launchOptions];
-    }
-    else {
-        [self applicationDidFinishLaunching:application];
-        result = YES;
-    }
+    if ([self respondsToSelector:@selector(gameThriveApplication:didFinishLaunchingWithOptions:)])
+        return [self gameThriveApplication:application didFinishLaunchingWithOptions:launchOptions];
     
-    return result;
+    return YES;
 }
-
 
 void processNotificationOpened(NSDictionary* resultDictionary) {
     UnitySendMessage(unityListener, "onPushNotificationReceived", dictionaryToJsonChar(resultDictionary));

@@ -1,5 +1,9 @@
+<!-- NOTE: Make sure to do a find and replace of 'com.hiptic.GameThriveExample3' with your full package name.
+           See AndroidManifest_GameThrive_*_Template.xml Template files as a base to add GCM and/or ADM push notifications to your Android App.
+ -->
+
 <?xml version="1.0" encoding="utf-8"?>
-<manifest xmlns:android="http://schemas.android.com/apk/res/android" android:installLocation="preferExternal" android:theme="@android:style/Theme.NoTitleBar" package="com.gamethrive.Messenger" android:versionName="1.0" android:versionCode="1">
+<manifest xmlns:android="http://schemas.android.com/apk/res/android" android:installLocation="preferExternal" android:theme="@android:style/Theme.NoTitleBar" package="com.hiptic.GameThriveExample3" android:versionName="1.0" android:versionCode="1">
     <supports-screens android:smallScreens="true" android:normalScreens="true" android:largeScreens="true" android:xlargeScreens="true" android:anyDensity="true" />
     <application
 		android:icon="@drawable/app_icon"
@@ -28,7 +32,7 @@
        	 android:permission="com.google.android.c2dm.permission.SEND" >
         	<intent-filter>
             	<action android:name="com.google.android.c2dm.intent.RECEIVE" />
-            	<category android:name="com.gamethrive.Messenger" />
+            	<category android:name="com.hiptic.GameThriveExample3" />
          	</intent-filter>
      	</receiver>
      	<service android:name="com.gamethrive.GcmIntentService" />
@@ -41,6 +45,6 @@
     <uses-permission android:name="android.permission.VIBRATE" />
     <uses-permission android:name="com.google.android.c2dm.permission.RECEIVE" />
 	
-    <permission android:name="com.gamethrive.Messenger.permission.C2D_MESSAGE" android:protectionLevel="signature" />
-    <uses-permission android:name="com.gamethrive.Messenger.permission.C2D_MESSAGE" />
+    <permission android:name="com.hiptic.GameThriveExample3.permission.C2D_MESSAGE" android:protectionLevel="signature" />
+    <uses-permission android:name="com.hiptic.GameThriveExample3.permission.C2D_MESSAGE" />
 </manifest>
